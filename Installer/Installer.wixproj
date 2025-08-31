@@ -9,12 +9,12 @@
     <OutputName>WinCamHTTPSetup</OutputName>
     <OutputType>Package</OutputType>
     <SolutionDir>$(MSBuildProjectDirectory)\..\</SolutionDir>
-    <WixTargetsPath Condition=" '$(WixTargetsPath)' == '' ">$(MSBuildProjectDirectory)\packages\wix.4.0.5\tools\wix.targets</WixTargetsPath>
+    <WixTargetsPath Condition=" '$(WixTargetsPath)' == '' ">$(MSBuildProjectDirectory)\packages\wix.4.0.6\tools\wix.targets</WixTargetsPath>
     <WixTargetsPath Condition=" '$(WixTargetsPath)' == '' AND '$(MSBuildExtensionsPath32)' != '' ">$(MSBuildExtensionsPath32)\Microsoft\WiX\v4.x\Wix.targets</WixTargetsPath>
     <WixTargetsPath Condition=" '$(WixTargetsPath)' == '' ">$(MSBuildExtensionsPath)\Microsoft\WiX\v4.x\Wix.targets</WixTargetsPath>
-    <WixInstallPath>$(MSBuildProjectDirectory)\packages\wix.4.0.5\tools</WixInstallPath>
-    <WixTasksPath>$(MSBuildProjectDirectory)\packages\wix.4.0.5\tools\WixTasks.dll</WixTasksPath>
-    <WixExtDir>$(MSBuildProjectDirectory)\packages\wix.4.0.5\tools</WixExtDir>
+    <WixInstallPath>$(MSBuildProjectDirectory)\packages\wix.4.0.6\tools</WixInstallPath>
+    <WixTasksPath>$(MSBuildProjectDirectory)\packages\wix.4.0.6\tools\WixTasks.dll</WixTasksPath>
+    <WixExtDir>$(MSBuildProjectDirectory)\packages\wix.4.0.6\tools</WixExtDir>
     <DefineSolutionProperties>false</DefineSolutionProperties>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x86' ">
@@ -40,7 +40,7 @@
   </ItemGroup>
   <ItemGroup>
     <WixExtension Include="WixUIExtension">
-      <HintPath>$(MSBuildProjectDirectory)\packages\wix.4.0.5\tools\WixUIExtension.dll</HintPath>
+      <HintPath>$(MSBuildProjectDirectory)\packages\wix.4.0.6\tools\WixUIExtension.dll</HintPath>
       <Name>WixUIExtension</Name>
     </WixExtension>
   </ItemGroup>
@@ -53,10 +53,10 @@
   </Target>
   <Target Name="BeforeBuild">
     <ItemGroup>
-      <WixToolPath Include="$(MSBuildProjectDirectory)\packages\WiX.4.0.5\tools\**" />
+      <WixToolPath Include="$(MSBuildProjectDirectory)\packages\WiX.4.0.6\tools\**" />
     </ItemGroup>
     <PropertyGroup>
-      <WixToolPath>$(MSBuildProjectDirectory)\packages\WiX.4.0.5\tools</WixToolPath>
+      <WixToolPath>$(MSBuildProjectDirectory)\packages\WiX.4.0.6\tools</WixToolPath>
     </PropertyGroup>
   </Target>
 </Project>

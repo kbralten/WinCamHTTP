@@ -6,12 +6,12 @@
 
 .DESCRIPTION
     This script performs the complete build and packaging for WinCamHTTP:
-    1. Checks for WiX Toolset v3.11 or newer
+    1. Checks for WiX Toolset v4.0 or newer
     2. Builds the main solution in Release x64 configuration
     3. Builds the MSI installer using WiX
     4. Creates a distributable MSI package
     
-    Requires WiX Toolset v3.11+ to be installed.
+    Requires WiX Toolset v4.0+ to be installed.
 
 .PARAMETER Configuration
     Build configuration (default: Release)
