@@ -4,13 +4,13 @@ This directory contains the WiX Toolset configuration for creating a professiona
 
 ## Prerequisites
 
-### WiX Toolset v3.11+
+### WiX Toolset v4.0+
 The installer requires the WiX Toolset to be installed on the build machine.
 
 **Download and Install:**
 - Download from: https://wixtoolset.org/releases/
-- Install WiX Toolset v3.11 or newer
-- Alternative: `choco install wixtoolset`
+- Install WiX Toolset v4.0 or newer
+- Alternative: `dotnet tool install --global wix`
 
 ### Visual Studio Build Tools
 - Visual Studio 2022 Community (or Professional/Enterprise)
@@ -119,7 +119,7 @@ Select **"WinCamHTTP Source"** as your camera.
 
 ### ❌ **Build Fails: WiX Not Found**
 ```
-Error: The WiX Toolset v3.11 build tools must be installed
+Error: The WiX Toolset v4.0 build tools must be installed
 ```
 **Solution:** Install WiX Toolset from https://wixtoolset.org/releases/
 

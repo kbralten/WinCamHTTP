@@ -82,10 +82,10 @@ function Install-WixToolset {
     
     # Verify WiX tools were installed
     $wixBinPath = Join-Path $packagesDir "WiX\tools"
-    $candlePath = Join-Path $wixBinPath "candle.exe"
+    $wixPath = Join-Path $wixBinPath "wix.exe"
     
-    if (-not (Test-Path $candlePath)) {
-        throw "WiX tools not found after installation: $candlePath"
+    if (-not (Test-Path $wixPath)) {
+        throw "WiX tools not found after installation: $wixPath"
     }
     
     Write-Host "WiX Toolset installed successfully to: $wixBinPath"

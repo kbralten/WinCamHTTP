@@ -77,9 +77,9 @@ function Test-WixToolset {
     
     # Check common installation paths
     $WixPaths = @(
-        "${env:ProgramFiles(x86)}\WiX Toolset v3.11\bin\candle.exe",
-        "${env:ProgramFiles}\WiX Toolset v3.11\bin\candle.exe",
-        "${env:ProgramFiles(x86)}\Microsoft SDKs\Windows\v7.0A\Bin\WiX\candle.exe"
+        "${env:ProgramFiles(x86)}\WiX Toolset v4.0\bin\wix.exe",
+        "${env:ProgramFiles}\WiX Toolset v4.0\bin\wix.exe",
+        "${env:ProgramFiles(x86)}\Microsoft SDKs\Windows\v7.0A\Bin\WiX\wix.exe"
     )
     
     foreach ($path in $WixPaths) {
@@ -91,7 +91,7 @@ function Test-WixToolset {
     
     # Check PATH environment variable
     try {
-        $candleVersion = & candle.exe -? 2>$null
+        $wixVersion = & wix.exe --version 2>$null
         if ($LASTEXITCODE -eq 0) {
             Write-Host "Found WiX Toolset in PATH" -ForegroundColor Green
             return $true
@@ -100,11 +100,11 @@ function Test-WixToolset {
         # Continue to error message
     }
     
-    Write-Host "WiX Toolset v3.11 or newer is required but not found!" -ForegroundColor Red
+    Write-Host "WiX Toolset v4.0 or newer is required but not found!" -ForegroundColor Red
     Write-Host ""
     Write-Host "To install WiX Toolset:" -ForegroundColor Yellow
     Write-Host "1. Download from: https://wixtoolset.org/releases/" -ForegroundColor White
-    Write-Host "2. Install WiX Toolset v3.11 or newer" -ForegroundColor White
+    Write-Host "2. Install WiX Toolset v4.0 or newer" -ForegroundColor White
     Write-Host "3. Restart this script" -ForegroundColor White
     Write-Host ""
     Write-Host "Alternative - Use Chocolatey:" -ForegroundColor Yellow
