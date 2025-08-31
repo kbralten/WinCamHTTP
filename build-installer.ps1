@@ -79,7 +79,8 @@ function Test-WixToolset {
     $WixPaths = @(
         "${env:ProgramFiles(x86)}\WiX Toolset v4.0\bin\wix.exe",
         "${env:ProgramFiles}\WiX Toolset v4.0\bin\wix.exe",
-        "${env:ProgramFiles(x86)}\Microsoft SDKs\Windows\v7.0A\Bin\WiX\wix.exe"
+        "${env:ProgramFiles(x86)}\Microsoft SDKs\Windows\v7.0A\Bin\WiX\wix.exe",
+        "${RepoRoot}\packages\wix.4.0.6\tools\net6.0\any\wix.exe"
     )
     
     foreach ($path in $WixPaths) {
