@@ -65,17 +65,16 @@
     <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
       
       <!-- Main Virtual Camera DLL -->
-  <Component Id="VirtualCameraDLL" Guid="{11111111-1111-1111-1111-111111111111}">
+      <Component Id="VirtualCameraDLL" Guid="{11111111-1111-1111-1111-111111111111}">
         <File Id="WinCamHTTPSourceDLL" 
               Source="..\x64\Release\WinCamHTTPSource.dll" 
-              KeyPath="yes" />
-        
-        <!-- COM Registration for the Virtual Camera DLL -->
-        <RegistryValue Root="HKLM" 
-                       Key="Software\Classes\CLSID\{860BB310-5D01-11d0-BD3B-00A0C911CE86}\Instance\{12345678-ABCD-EFAB-CDEF-123456789ABC}"
-                       Name="FriendlyName" 
-                       Type="string" 
-                       Value="WinCamHTTP Source" />
+              KeyPath="yes">
+          <!-- COM Registration for the Virtual Camera DLL -->
+          <Class Id="{12345678-ABCD-EFAB-CDEF-123456789ABC}"
+                 Context="InprocServer32"
+                 Description="WinCamHTTP Source"
+                 ThreadingModel="both" />
+        </File>
       </Component>
       
       <!-- Setup Application -->
@@ -113,13 +112,10 @@
       
     </ComponentGroup>
 
-    <!-- Custom Actions for COM Registration (WiX v4 uses same pattern) -->
-    <CustomAction Id="RegisterCOM" Directory="INSTALLFOLDER" ExeCommand="regsvr32.exe /s &quot;[INSTALLFOLDER]WinCamHTTPSource.dll&quot;" Execute="deferred" Impersonate="no" />
-    <CustomAction Id="UnregisterCOM" Directory="INSTALLFOLDER" ExeCommand="regsvr32.exe /s /u &quot;[INSTALLFOLDER]WinCamHTTPSource.dll&quot;" Execute="deferred" Impersonate="no" />
+    <!-- Custom Actions for COM Registration are no longer needed -->
 
+    <!-- The InstallExecuteSequence no longer needs custom actions for COM registration -->
     <InstallExecuteSequence>
-      <Custom Action="RegisterCOM" After="InstallFiles" Condition="NOT Installed" />
-      <Custom Action="UnregisterCOM" Before="RemoveFiles" Condition="Installed" />
     </InstallExecuteSequence>
 
     <!-- UI Configuration -->
