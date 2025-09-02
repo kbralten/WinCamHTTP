@@ -13,6 +13,7 @@ struct CameraConfig
 	std::wstring friendlyName;
 	UINT width;
 	UINT height;
+	bool enabled;
 };
 
 HINSTANCE _instance;
@@ -29,6 +30,7 @@ HWND _hwndBtnAdd = nullptr;
 HWND _hwndBtnRemove = nullptr;
 HWND _hwndBtnSave = nullptr;
 HWND _hwndStatus = nullptr;
+HWND _hwndChkEnabled = nullptr;
 
 std::vector<CameraConfig> _cameras;
 
@@ -160,6 +162,17 @@ HRESULT LoadCamerasFromRegistry()
 			RegQueryValueExW(hCameraKey, L"Height", nullptr, nullptr, (LPBYTE)&height, &dataSize);
 			camera.width = width;
 			camera.height = height;
+					// Read Enabled flag
+					dataSize = sizeof(DWORD);
+					DWORD enabled = 1;
+					if (RegQueryValueExW(hCameraKey, L"Enabled", nullptr, nullptr, (LPBYTE)&enabled, &dataSize) == ERROR_SUCCESS)
+					{
+						camera.enabled = (enabled != 0);
+					}
+					else
+					{
+						camera.enabled = true;
+					}
 			
 			// Read Friendly Name
 			dataSize = 256 * sizeof(WCHAR);
@@ -205,15 +218,19 @@ HRESULT SaveCamerasToRegistry()
 		{
 			wil::unique_hkey keyGuard(hKey);
 			
-			// Save URL
-			RegSetValueExW(hKey, L"URL", 0, REG_SZ, (LPBYTE)camera.url.c_str(), (camera.url.length() + 1) * sizeof(WCHAR));
+			// Save URL (cast byte count to DWORD to avoid size_t -> DWORD conversion warning)
+			RegSetValueExW(hKey, L"URL", 0, REG_SZ, (LPBYTE)camera.url.c_str(), (DWORD)((camera.url.length() + 1) * sizeof(WCHAR)));
 			
 			// Save Width/Height
 			RegSetValueExW(hKey, L"Width", 0, REG_DWORD, (LPBYTE)&camera.width, sizeof(DWORD));
 			RegSetValueExW(hKey, L"Height", 0, REG_DWORD, (LPBYTE)&camera.height, sizeof(DWORD));
 			
-			// Save Friendly Name
-			RegSetValueExW(hKey, L"FriendlyName", 0, REG_SZ, (LPBYTE)camera.friendlyName.c_str(), (camera.friendlyName.length() + 1) * sizeof(WCHAR));
+			// Save Friendly Name (cast byte count to DWORD to avoid size_t -> DWORD conversion warning)
+			RegSetValueExW(hKey, L"FriendlyName", 0, REG_SZ, (LPBYTE)camera.friendlyName.c_str(), (DWORD)((camera.friendlyName.length() + 1) * sizeof(WCHAR)));
+
+			// Save Enabled flag
+			DWORD enabled = camera.enabled ? 1 : 0;
+			RegSetValueExW(hKey, L"Enabled", 0, REG_DWORD, (LPBYTE)&enabled, sizeof(DWORD));
 		}
 		else
 		{
@@ -266,6 +283,12 @@ void PopulateFieldsFromSelectedCamera()
 	else if (camera.width == 1280 && camera.height == 720) comboIndex = 3;
 	else if (camera.width == 1920 && camera.height == 1080) comboIndex = 4;
 	SendMessage(_hwndComboResolution, CB_SETCURSEL, comboIndex, 0);
+
+	// Populate enabled checkbox
+	if (_hwndChkEnabled)
+	{
+		SendMessage(_hwndChkEnabled, BM_SETCHECK, camera.enabled ? BST_CHECKED : BST_UNCHECKED, 0);
+	}
 }
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPWSTR lpCmdLine, _In_ int nCmdShow)
@@ -343,6 +366,12 @@ HRESULT SaveSettingsToRegistry()
 	_cameras[selectedIndex].friendlyName = friendlyName;
 	_cameras[selectedIndex].width = width;
 	_cameras[selectedIndex].height = height;
+	// Enabled checkbox
+	if (_hwndChkEnabled)
+	{
+		LRESULT check = SendMessage(_hwndChkEnabled, BM_GETCHECK, 0, 0);
+		_cameras[selectedIndex].enabled = (check == BST_CHECKED);
+	}
 	
 	// Save to registry
 	HRESULT hr = SaveCamerasToRegistry();
@@ -387,44 +416,52 @@ ATOM MyRegisterClass(HINSTANCE instance)
 HWND InitInstance(HINSTANCE instance, int cmd)
 {
 	_instance = instance;
-	auto hwnd = CreateWindowW(_windowClass, _title, WS_OVERLAPPEDWINDOW & ~WS_MAXIMIZEBOX & ~WS_THICKFRAME, 
-		0, 0, 600, 450, nullptr, nullptr, instance, nullptr);
+	// Make the main window slightly larger so buttons at the bottom are not cut off on smaller displays
+	auto hwnd = CreateWindowW(_windowClass, _title, WS_OVERLAPPEDWINDOW & ~WS_MAXIMIZEBOX & ~WS_THICKFRAME,
+		0, 0, 760, 560, nullptr, nullptr, instance, nullptr);
 	if (!hwnd)
 		return nullptr;
 
 	_hwndMain = hwnd;
 
 	// Create controls for the setup UI
-	// Camera list
+	// Left: Camera list with Add/Remove
 	CreateWindowW(L"STATIC", L"Virtual Cameras:", WS_VISIBLE | WS_CHILD,
-		20, 20, 120, 20, hwnd, nullptr, instance, nullptr);
-	_hwndListCameras = CreateWindowW(L"LISTBOX", L"", WS_VISIBLE | WS_CHILD | WS_BORDER | WS_VSCROLL | LBS_NOTIFY,
-		20, 45, 250, 150, hwnd, (HMENU)2001, instance, nullptr);
+		20, 20, 200, 20, hwnd, nullptr, instance, nullptr);
+	_hwndListCameras = CreateWindowW(L"LISTBOX", L"", WS_VISIBLE | WS_CHILD | WS_BORDER | WS_VSCROLL | LBS_NOTIFY | WS_TABSTOP,
+		20, 45, 260, 260, hwnd, (HMENU)2001, instance, nullptr);
 
-	// Add/Remove buttons
-	_hwndBtnAdd = CreateWindowW(L"BUTTON", L"Add Camera", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-		280, 45, 100, 30, hwnd, (HMENU)1002, instance, nullptr);
-	_hwndBtnRemove = CreateWindowW(L"BUTTON", L"Remove Camera", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-		280, 85, 100, 30, hwnd, (HMENU)1003, instance, nullptr);
+	// Add/Remove buttons under the list (tab order follows creation order)
+	_hwndBtnAdd = CreateWindowW(L"BUTTON", L"Add Camera", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON | WS_TABSTOP,
+		20, 315, 120, 30, hwnd, (HMENU)1002, instance, nullptr);
+	_hwndBtnRemove = CreateWindowW(L"BUTTON", L"Remove Camera", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON | WS_TABSTOP,
+		160, 315, 120, 30, hwnd, (HMENU)1003, instance, nullptr);
 
-	// Configuration section
-	CreateWindowW(L"STATIC", L"Configuration for Selected Camera:", WS_VISIBLE | WS_CHILD,
-		20, 210, 250, 20, hwnd, nullptr, instance, nullptr);
+	// Right: Configuration group box
+	CreateWindowW(L"BUTTON", L"Configuration for Selected Camera:", WS_VISIBLE | WS_CHILD | BS_GROUPBOX,
+		300, 20, 360, 300, hwnd, nullptr, instance, nullptr);
 
+	// URL
 	CreateWindowW(L"STATIC", L"HTTP URL:", WS_VISIBLE | WS_CHILD,
-		20, 240, 80, 20, hwnd, nullptr, instance, nullptr);
-	_hwndEditUrl = CreateWindowW(L"EDIT", L"", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_AUTOHSCROLL,
-		110, 238, 420, 22, hwnd, nullptr, instance, nullptr);
+		320, 50, 80, 20, hwnd, nullptr, instance, nullptr);
+	_hwndEditUrl = CreateWindowW(L"EDIT", L"", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_AUTOHSCROLL | WS_TABSTOP,
+		410, 48, 240, 22, hwnd, nullptr, instance, nullptr);
 
+	// Camera Name
 	CreateWindowW(L"STATIC", L"Camera Name:", WS_VISIBLE | WS_CHILD,
-		20, 275, 80, 20, hwnd, nullptr, instance, nullptr);
-	_hwndEditName = CreateWindowW(L"EDIT", L"", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_AUTOHSCROLL,
-		110, 273, 420, 22, hwnd, nullptr, instance, nullptr);
+		320, 85, 80, 20, hwnd, nullptr, instance, nullptr);
+	_hwndEditName = CreateWindowW(L"EDIT", L"", WS_VISIBLE | WS_CHILD | WS_BORDER | ES_AUTOHSCROLL | WS_TABSTOP,
+		410, 83, 240, 22, hwnd, nullptr, instance, nullptr);
 
+	// Resolution
 	CreateWindowW(L"STATIC", L"Resolution:", WS_VISIBLE | WS_CHILD,
-		20, 310, 80, 20, hwnd, nullptr, instance, nullptr);
-	_hwndComboResolution = CreateWindowW(L"COMBOBOX", L"", WS_VISIBLE | WS_CHILD | CBS_DROPDOWNLIST,
-		110, 308, 150, 100, hwnd, nullptr, instance, nullptr);
+		320, 120, 80, 20, hwnd, nullptr, instance, nullptr);
+	_hwndComboResolution = CreateWindowW(L"COMBOBOX", L"", WS_VISIBLE | WS_CHILD | CBS_DROPDOWNLIST | WS_TABSTOP,
+		410, 118, 150, 100, hwnd, nullptr, instance, nullptr);
+
+	// Enabled checkbox
+	_hwndChkEnabled = CreateWindowW(L"BUTTON", L"Enabled", WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX | WS_TABSTOP,
+		320, 155, 100, 22, hwnd, (HMENU)1004, instance, nullptr);
 
 	// Populate resolution combo box
 	SendMessage(_hwndComboResolution, CB_ADDSTRING, 0, (LPARAM)L"640 x 480");
@@ -434,12 +471,19 @@ HWND InitInstance(HINSTANCE instance, int cmd)
 	SendMessage(_hwndComboResolution, CB_ADDSTRING, 0, (LPARAM)L"1920 x 1080");
 	SendMessage(_hwndComboResolution, CB_SETCURSEL, 0, 0); // default to 640x480
 
-	_hwndBtnSave = CreateWindowW(L"BUTTON", L"Save Settings", WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON,
-		110, 350, 120, 30, hwnd, (HMENU)1001, instance, nullptr);
+	// Save, OK, Cancel buttons
+	_hwndBtnSave = CreateWindowW(L"BUTTON", L"Save Settings", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON | WS_TABSTOP,
+		410, 190, 120, 30, hwnd, (HMENU)1001, instance, nullptr);
 
-	_hwndStatus = CreateWindowW(L"STATIC", L"Configure camera settings and save to registry.\nNote: This program must be run as Administrator to save settings.", 
+	CreateWindowW(L"BUTTON", L"OK", WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON | WS_TABSTOP,
+		500, 430, 80, 28, hwnd, (HMENU)IDOK, instance, nullptr);
+	CreateWindowW(L"BUTTON", L"Cancel", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON | WS_TABSTOP,
+		590, 430, 80, 28, hwnd, (HMENU)IDCANCEL, instance, nullptr);
+
+	// Increase status control height so it doesn't overlap with bottom buttons on certain DPI/settings
+	_hwndStatus = CreateWindowW(L"STATIC", L"Configure camera settings and save to registry. Note: This program must be run as Administrator to save settings.", 
 		WS_VISIBLE | WS_CHILD | SS_LEFT,
-		20, 390, 540, 40, hwnd, nullptr, instance, nullptr);
+		20, 360, 700, 60, hwnd, nullptr, instance, nullptr);
 
 	// Load any existing settings
 	LoadPersistedSettingsFromRegistry();
@@ -476,6 +520,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 			newCamera.friendlyName = L"WinCamHTTP Virtual Camera " + newId;
 			newCamera.width = 640;
 			newCamera.height = 480;
+			newCamera.enabled = true;
 			
 			_cameras.push_back(newCamera);
 			RefreshCameraList();
@@ -536,6 +581,21 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 		case IDM_EXIT:
 			DestroyWindow(hwnd);
 			break;
+
+		case IDOK:
+		{
+			// Save settings for selected camera (if any) then exit
+			SaveSettingsToRegistry();
+			DestroyWindow(hwnd);
+		}
+		break;
+
+		case IDCANCEL:
+		{
+			// Discard and exit
+			DestroyWindow(hwnd);
+		}
+		break;
 		default:
 			return DefWindowProc(hwnd, message, wParam, lParam);
 		}

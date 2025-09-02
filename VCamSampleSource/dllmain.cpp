@@ -51,12 +51,12 @@ GUID GenerateCameraClsid(LPCWSTR cameraId)
 // Helper function to get camera ID for a CLSID
 std::wstring GetCameraIdForClsid(REFCLSID clsid)
 {
-	auto key = GUID_ToStringW(clsid, false);
-	auto it = g_cameraMap.find(key);
-	if (it != g_cameraMap.end())
-	{
-		return it->second;
-	}
+    auto key = GUID_ToStringW(clsid, false);
+    auto it = g_cameraMap.find(key);
+    if (it != g_cameraMap.end())
+    {
+        return it->second;
+    }
 	
 	// If not found in map, try to load from registry
 	LoadCameraRegistrations();
@@ -176,7 +176,8 @@ struct ClassFactory : winrt::implements<ClassFactory, IClassFactory>
 	}
 };
 
-__control_entrypoint(DllExport)
+// Use the standard COM export signatures (STDAPI) so the linkage matches
+// the declarations in the platform headers (combaseapi.h).
 STDAPI DllCanUnloadNow()
 {
 	if (winrt::get_module_lock())
@@ -229,6 +230,9 @@ STDAPI DllRegisterServer()
 		RETURN_IF_WIN32_ERROR(RegWriteKey(HKEY_LOCAL_MACHINE, path.c_str(), key.put()));
 		RETURN_IF_WIN32_ERROR(RegWriteValue(key.get(), nullptr, exePath));
 		RETURN_IF_WIN32_ERROR(RegWriteValue(key.get(), L"ThreadingModel", L"Both"));
+		
+		std::wstring friendlyName = pair.second + L" (WinCamHTTP)";
+		RETURN_IF_WIN32_ERROR(RegWriteValue(key.get(), L"FriendlyName", friendlyName));
 		
 		WINTRACE(L"DllRegisterServer: Registered CLSID %s for camera %s", clsid.c_str(), pair.second.c_str());
 	}

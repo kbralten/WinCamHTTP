@@ -358,6 +358,44 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 		case IDM_TRAY_EXIT:
 			PostQuitMessage(0);
 			break;
+
+		case IDM_TRAY_SETUP:
+		{
+			// Attempt to launch the setup application. Prefer the executable next to this process's exe.
+			wchar_t exePath[MAX_PATH]{};
+			if (GetModuleFileNameW(NULL, exePath, ARRAYSIZE(exePath)) > 0)
+			{
+				// Strip filename from path to get folder
+				wchar_t* lastSlash = wcsrchr(exePath, L'\\');
+				if (lastSlash)
+				{
+					*(lastSlash + 1) = L'\0';
+				}
+				std::wstring setupPath = std::wstring(exePath) + L"ARM64\\Release\\WinCamHTTPSetup.exe";
+
+				// If the ARM64 build path doesn't contain the setup exe, try sibling location
+				if (GetFileAttributesW(setupPath.c_str()) == INVALID_FILE_ATTRIBUTES)
+				{
+					setupPath = std::wstring(exePath) + L"WinCamHTTPSetup.exe";
+				}
+
+				SHELLEXECUTEINFOW sei{};
+				sei.cbSize = sizeof(sei);
+				sei.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
+				sei.hwnd = NULL;
+				sei.lpVerb = L"open";
+				sei.lpFile = setupPath.c_str();
+				sei.nShow = SW_SHOWNORMAL;
+				if (!ShellExecuteExW(&sei))
+				{
+					wchar_t msg[512];
+					swprintf_s(msg, L"Failed to launch Setup: '%s' (Error %d)", setupPath.c_str(), GetLastError());
+					MessageBoxW(NULL, msg, L"WinCamHTTP", MB_OK | MB_ICONERROR);
+				}
+			}
+		}
+		break;
+
 		}
 	}
 	break;

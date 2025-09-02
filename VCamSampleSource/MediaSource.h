@@ -135,6 +135,9 @@ public:
 
 	HRESULT Initialize(IMFAttributes* attributes);
 
+	// Helper to load friendly name for the camera from registry
+	HRESULT LoadFriendlyNameFromRegistry(std::wstring& friendlyName);
+
 	// IVCamConfiguration
 	STDMETHOD(SetConfiguration)(LPCWSTR url, UINT32 width, UINT32 height);
 	STDMETHOD(GetConfiguration)(LPWSTR* url, UINT32* width, UINT32* height);
