@@ -15,6 +15,11 @@ public:
 	}
 
 	HRESULT Initialize();
+	HRESULT SetCameraId(LPCWSTR cameraId)
+	{
+		_cameraId = cameraId ? cameraId : L"Camera1";
+		return S_OK;
+	}
 
 private:
 #if _DEBUG
@@ -34,5 +39,6 @@ private:
 
 private:
 	winrt::com_ptr<MediaSource> _source;
+	std::wstring _cameraId;
 };
 

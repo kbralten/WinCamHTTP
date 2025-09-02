@@ -61,9 +61,24 @@ public:
 			_streams[i].attach(stream.detach()); // this is needed because of wil+winrt mumbo-jumbo, as "_streams[i] = stream.detach()" just cause one extra AddRef
 		}
 		
-		// Read configuration from HKEY_LOCAL_MACHINE (accessible by system services)
+		// Default values
+		_mjpegUrl = L"";
+		_configWidth = 1920;
+		_configHeight = 1080;
+		_cameraId = L"Camera1"; // Default camera ID
+	}
+
+	HRESULT LoadConfiguration(LPCWSTR cameraId)
+	{
+		if (cameraId)
+		{
+			_cameraId = cameraId;
+		}
+		
+		// Read configuration from HKEY_LOCAL_MACHINE for this specific camera
+		std::wstring regPath = L"SOFTWARE\\WinCamHTTP\\Cameras\\" + _cameraId;
 		HKEY hKey;
-		LSTATUS result = RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\WinCamHTTP", 0, KEY_READ, &hKey);
+		LSTATUS result = RegOpenKeyExW(HKEY_LOCAL_MACHINE, regPath.c_str(), 0, KEY_READ, &hKey);
 		if (result == ERROR_SUCCESS)
 		{
 			WCHAR urlBuffer[2048]{};
@@ -73,12 +88,12 @@ public:
 			if (result == ERROR_SUCCESS && type == REG_SZ)
 			{
 				_mjpegUrl = urlBuffer;
-				WINTRACE(L"MediaSource: Read URL from HKLM: %s", _mjpegUrl.c_str());
+				WINTRACE(L"MediaSource: Read URL from HKLM for %s: %s", _cameraId.c_str(), _mjpegUrl.c_str());
 			}
 			else
 			{
 				_mjpegUrl = L"";
-				WINTRACE(L"MediaSource: Failed to read URL from HKLM, using empty");
+				WINTRACE(L"MediaSource: Failed to read URL from HKLM for %s, using empty", _cameraId.c_str());
 			}
 			
 			DWORD size = sizeof(DWORD);
@@ -86,7 +101,7 @@ public:
 			if (result != ERROR_SUCCESS || type != REG_DWORD)
 			{
 				_configWidth = 1920;
-				WINTRACE(L"MediaSource: Failed to read Width from HKLM, using default 1920");
+				WINTRACE(L"MediaSource: Failed to read Width from HKLM for %s, using default 1920", _cameraId.c_str());
 			}
 			
 			size = sizeof(DWORD);
@@ -94,19 +109,15 @@ public:
 			if (result != ERROR_SUCCESS || type != REG_DWORD)
 			{
 				_configHeight = 1080;
-				WINTRACE(L"MediaSource: Failed to read Height from HKLM, using default 1080");
+				WINTRACE(L"MediaSource: Failed to read Height from HKLM for %s, using default 1080", _cameraId.c_str());
 			}
 			
 			RegCloseKey(hKey);
-			WINTRACE(L"MediaSource: Configuration from HKLM: %s %ux%u", _mjpegUrl.c_str(), _configWidth, _configHeight);
+			WINTRACE(L"MediaSource: Configuration from HKLM for %s: %s %ux%u", _cameraId.c_str(), _mjpegUrl.c_str(), _configWidth, _configHeight);
 		}
 		else
 		{
-			// Default values
-			_mjpegUrl = L"";
-			_configWidth = 1920;
-			_configHeight = 1080;
-			WINTRACE(L"MediaSource: Failed to open HKLM registry, using defaults: %ux%u", _configWidth, _configHeight);
+			WINTRACE(L"MediaSource: Failed to open HKLM registry for %s, using defaults: %ux%u", _cameraId.c_str(), _configWidth, _configHeight);
 		}
 
 		// Apply configuration immediately to streams so they don't query back into source during Start
@@ -118,6 +129,8 @@ public:
 				_streams[i]->SetResolution(_configWidth, _configHeight);
 			}
 		}
+		
+		return S_OK;
 	}
 
 	HRESULT Initialize(IMFAttributes* attributes);
@@ -160,5 +173,6 @@ private:
 	std::wstring _mjpegUrl;
 	UINT32 _configWidth = 1920;
 	UINT32 _configHeight = 1080;
+	std::wstring _cameraId;
 };
 
