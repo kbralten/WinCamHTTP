@@ -57,6 +57,7 @@ BEGIN
     POPUP "TrayMenu"
     BEGIN
         MENUITEM "E&xit",                       IDM_TRAY_EXIT
+        MENUITEM "&Setup...",                  IDM_TRAY_SETUP
     END
 END
 

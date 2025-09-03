@@ -148,7 +148,14 @@ const std::wstring GetProcessName(DWORD pid)
 const LSTATUS RegWriteKey(HKEY key, PCWSTR path, HKEY* outKey)
 {
 	*outKey = nullptr;
-	return RegCreateKeyEx(key, path, 0, nullptr, 0, KEY_WRITE, nullptr, outKey, nullptr);
+	// Ensure we write to the 64-bit registry view when building/running as a 64-bit process.
+	// This avoids creating keys under Wow6432Node when a 32-bit process runs on a 64-bit OS.
+#if defined(_WIN64)
+	REGSAM sam = KEY_WRITE | KEY_WOW64_64KEY;
+#else
+	REGSAM sam = KEY_WRITE;
+#endif
+	return RegCreateKeyEx(key, path, 0, nullptr, 0, sam, nullptr, outKey, nullptr);
 }
 
 const LSTATUS RegWriteValue(HKEY key, PCWSTR name, const std::wstring& value)

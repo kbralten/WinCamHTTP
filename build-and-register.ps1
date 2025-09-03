@@ -30,7 +30,8 @@ param(
     [string]$Configuration = "Release",
     [string]$Platform = "x64", 
     [string]$TargetPath = "C:\WinCamHTTP",
-    [switch]$SkipBuild
+    [switch]$SkipBuild,
+    [string]$LogPath
 )
 
 # Script variables
@@ -67,15 +68,37 @@ function Test-FileExists {
 function Invoke-Command {
     param([string]$Command, [string[]]$Arguments, [string]$Description)
     Write-Host "Running: $Description..." -ForegroundColor Yellow
-    $process = Start-Process -FilePath $Command -ArgumentList $Arguments -Wait -PassThru -NoNewWindow
-    if ($process.ExitCode -ne 0) {
-        Write-Error "$Description failed with exit code $($process.ExitCode)"
+
+    # Use the PowerShell call operator so the child process runs in the same console
+    # and output is streamed directly. This avoids occasional hangs observed with Start-Process.
+    try {
+        & $Command @Arguments
+    } catch {
+        Write-Error "$Description failed: $($_.Exception.Message)"
+        exit 1
+    }
+
+    $exitCode = $LASTEXITCODE
+    if ($null -eq $exitCode) { $exitCode = 0 }
+    if ($exitCode -ne 0) {
+        Write-Error "$Description failed with exit code $exitCode"
         exit 1
     }
     Write-Host "$Description completed successfully." -ForegroundColor Green
 }
 
 try {
+    # Optional transcript for capturing console output (useful for diagnosing hangs)
+    $transcriptStarted = $false
+    if ($LogPath) {
+        try {
+            Start-Transcript -Path $LogPath -Force -Append | Out-Null
+            $transcriptStarted = $true
+            Write-Host "Transcript started: $LogPath" -ForegroundColor Cyan
+        } catch {
+            Write-Warning "Could not start transcript: $($_.Exception.Message)"
+        }
+    }
     # Step 1: Verify prerequisites
     Write-Host "[1/5] Checking prerequisites..." -ForegroundColor Cyan
     Test-FileExists $SolutionFile "Solution file"
@@ -162,4 +185,13 @@ try {
     Write-Host "Stack trace:" -ForegroundColor Red
     Write-Host $_.ScriptStackTrace -ForegroundColor Red
     exit 1
+} finally {
+    if ($transcriptStarted) {
+        try {
+            Stop-Transcript | Out-Null
+            Write-Host "Transcript stopped." -ForegroundColor Cyan
+        } catch {
+            Write-Warning "Failed to stop transcript: $($_.Exception.Message)"
+        }
+    }
 }

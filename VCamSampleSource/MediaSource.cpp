@@ -487,3 +487,22 @@ STDMETHODIMP MediaSource::GetConfiguration(LPWSTR* url, UINT32* width, UINT32* h
 	WINTRACE(L"MediaSource::GetConfiguration url:'%s' resolution:%ux%u", *url ? *url : L"(null)", *width, *height);
 	return S_OK;
 }
+
+HRESULT MediaSource::LoadFriendlyNameFromRegistry(std::wstring& friendlyName) {
+    friendlyName = L"FRIENDLY_NAME (WinCamHTTP)";
+
+    HKEY hKey;
+    LSTATUS result = RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\WinCamHTTP\\Cameras", 0, KEY_READ, &hKey);
+    if (result == ERROR_SUCCESS) {
+        WCHAR nameBuffer[256] = {};
+        DWORD bufferSize = sizeof(nameBuffer);
+        DWORD type;
+        result = RegQueryValueExW(hKey, L"FriendlyName", nullptr, &type, (LPBYTE)nameBuffer, &bufferSize);
+        if (result == ERROR_SUCCESS && type == REG_SZ) {
+            friendlyName = std::wstring(nameBuffer);
+        }
+        RegCloseKey(hKey);
+    }
+
+    return S_OK;
+}

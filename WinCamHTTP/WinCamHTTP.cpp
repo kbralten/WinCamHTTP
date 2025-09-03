@@ -2,30 +2,39 @@
 #include "tools.h"
 #include "WinCamHTTP.h"
 #include <shellapi.h>
+#include <map>
 
 #define MAX_LOADSTRING 100
 
-// 3cad447d-f283-4af4-a3b2-6f5363309f52
-static GUID CLSID_VCam = { 0x3cad447d,0xf283,0x4af4,{0xa3,0xb2,0x6f,0x53,0x63,0x30,0x9f,0x52} };
+struct CameraInfo
+{
+	std::wstring id;
+	std::wstring friendlyName;
+	std::wstring url;
+	UINT width;
+	UINT height;
+	GUID clsid;
+	wil::com_ptr_nothrow<IMFVirtualCamera> vcam;
+};
 
 HINSTANCE _instance;
 WCHAR _title[MAX_LOADSTRING];
 WCHAR _windowClass[MAX_LOADSTRING];
-wil::com_ptr_nothrow<IMFVirtualCamera> _vcam;
-DWORD _vcamCookie;
+std::vector<CameraInfo> _cameras;
 HWND _hwnd;
 NOTIFYICONDATA _nid{};
-bool _cameraStarted = false;
+bool _camerasStarted = false;
 
 ATOM MyRegisterClass(HINSTANCE hInstance);
 HWND InitInstance(HINSTANCE, int);
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
-HRESULT RegisterVirtualCamera();
-HRESULT UnregisterVirtualCamera();
-HRESULT LoadSettingsFromRegistry(std::wstring& url, UINT& width, UINT& height, std::wstring& friendlyName);
+HRESULT RegisterVirtualCameras();
+HRESULT UnregisterVirtualCameras();
+HRESULT LoadCameraSettingsFromRegistry();
 void CreateTrayIcon();
 void RemoveTrayIcon();
 void ShowTrayContextMenu(HWND hwnd, POINT pt);
+GUID GenerateCameraClsid(const std::wstring& cameraId);
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPWSTR lpCmdLine, _In_ int nCmdShow)
 {
@@ -64,14 +73,12 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
 		return -1;
 
 	// Load settings from registry
-	std::wstring url, friendlyName;
-	UINT width, height;
-	auto settingsResult = LoadSettingsFromRegistry(url, width, height, friendlyName);
+	auto settingsResult = LoadCameraSettingsFromRegistry();
 	
-	if (FAILED(settingsResult))
+	if (FAILED(settingsResult) || _cameras.empty())
 	{
 		MessageBox(nullptr, 
-			L"No configuration found. Please run WinCamHTTPSetup first to configure settings.\n\n"
+			L"No cameras configured. Please run WinCamHTTPSetup first to configure at least one camera.\n\n"
 			L"WinCamHTTPSetup must be run as administrator to save configuration to the registry.",
 			L"WinCamHTTP - Configuration Missing", 
 			MB_OK | MB_ICONWARNING);
@@ -82,28 +89,28 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
 	// Create tray icon
 	CreateTrayIcon();
 
-	// Automatically start the camera
-	auto hr = RegisterVirtualCamera();
+	// Automatically start all cameras
+	auto hr = RegisterVirtualCameras();
 	if (SUCCEEDED(hr))
 	{
-		_cameraStarted = true;
-		WINTRACE(L"Virtual camera started automatically");
+		_camerasStarted = true;
+		WINTRACE(L"All virtual cameras started automatically");
 		
 		// Update tray icon tooltip
-		wcscpy_s(_nid.szTip, L"WinCamHTTP - Camera Active");
+		wcscpy_s(_nid.szTip, L"WinCamHTTP - All Cameras Active");
 		Shell_NotifyIcon(NIM_MODIFY, &_nid);
 	}
 	else
 	{
-		WINTRACE(L"Failed to start virtual camera automatically: 0x%08X", hr);
+		WINTRACE(L"Failed to start one or more virtual cameras: 0x%08X", hr);
 		MessageBox(nullptr, 
-			L"Virtual Camera could not be started. Make sure the WinCamHTTPSource DLL is registered.\n\n"
+			L"One or more virtual cameras could not be started. Make sure the WinCamHTTPSource DLL is registered.\n\n"
 			L"Run 'regsvr32 WinCamHTTPSource.dll' as administrator.",
 			L"WinCamHTTP - Startup Error", 
 			MB_OK | MB_ICONERROR);
 		
-		// Still show tray icon even if camera failed to start
-		wcscpy_s(_nid.szTip, L"WinCamHTTP - Camera Failed");
+		// Still show tray icon even if cameras failed to start
+		wcscpy_s(_nid.szTip, L"WinCamHTTP - Camera Start Failed");
 		Shell_NotifyIcon(NIM_MODIFY, &_nid);
 	}
 
@@ -116,12 +123,12 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
 	}
 
 	// Cleanup
-	if (_cameraStarted)
+	if (_camerasStarted)
 	{
-		UnregisterVirtualCamera();
+		UnregisterVirtualCameras();
 	}
 	RemoveTrayIcon();
-	_vcam.reset();
+	_cameras.clear();
 	MFShutdown();
 
 	// cleanup & CRT leak checks
@@ -131,47 +138,92 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance
 	return (int)msg.wParam;
 }
 
-HRESULT LoadSettingsFromRegistry(std::wstring& url, UINT& width, UINT& height, std::wstring& friendlyName)
+GUID GenerateCameraClsid(const std::wstring& cameraId)
 {
+	// Base GUID: {3cad447d-f283-4af4-a3b2-6f5363309f52}
+	GUID clsid = { 0x3cad447d,0xf283,0x4af4,{0xa3,0xb2,0x6f,0x53,0x63,0x30,0x9f,0x52} };
+	
+	// Hash the camera ID and use it to modify the last few bytes
+	DWORD hash = 0;
+	for (int i = 0; i < (int)cameraId.length(); i++)
+	{
+		hash = hash * 31 + cameraId[i];
+	}
+	
+	// Modify the last DWORD of the GUID using the hash
+	clsid.Data4[4] = (hash & 0xFF);
+	clsid.Data4[5] = ((hash >> 8) & 0xFF);
+	clsid.Data4[6] = ((hash >> 16) & 0xFF);
+	clsid.Data4[7] = ((hash >> 24) & 0xFF);
+	
+	return clsid;
+}
+
+HRESULT LoadCameraSettingsFromRegistry()
+{
+	_cameras.clear();
+	
 	HKEY hKey;
-	LSTATUS result = RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\WinCamHTTP", 0, KEY_READ, &hKey);
+	LSTATUS result = RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\WinCamHTTP\\Cameras", 0, KEY_READ, &hKey);
 	if (result != ERROR_SUCCESS)
 		return HRESULT_FROM_WIN32(result);
 
 	wil::unique_hkey keyGuard(hKey);
 
-	// Read URL
-	DWORD dataSize = 2048 * sizeof(WCHAR);
-	std::vector<WCHAR> urlBuffer(2048);
-	result = RegQueryValueExW(hKey, L"URL", nullptr, nullptr, (LPBYTE)urlBuffer.data(), &dataSize);
-	if (result == ERROR_SUCCESS)
+	// Enumerate subkeys (camera IDs)
+	DWORD index = 0;
+	WCHAR cameraId[256];
+	DWORD nameSize = sizeof(cameraId) / sizeof(WCHAR);
+	
+	while (RegEnumKeyExW(hKey, index, cameraId, &nameSize, nullptr, nullptr, nullptr, nullptr) == ERROR_SUCCESS)
 	{
-		url = urlBuffer.data();
-	}
-
-	// Read Width
-	dataSize = sizeof(DWORD);
-	result = RegQueryValueExW(hKey, L"Width", nullptr, nullptr, (LPBYTE)&width, &dataSize);
-	if (result != ERROR_SUCCESS)
-		width = 640; // default
-
-	// Read Height
-	dataSize = sizeof(DWORD);
-	result = RegQueryValueExW(hKey, L"Height", nullptr, nullptr, (LPBYTE)&height, &dataSize);
-	if (result != ERROR_SUCCESS)
-		height = 480; // default
-
-	// Read Friendly Name
-	dataSize = 256 * sizeof(WCHAR);
-	std::vector<WCHAR> nameBuffer(256);
-	result = RegQueryValueExW(hKey, L"FriendlyName", nullptr, nullptr, (LPBYTE)nameBuffer.data(), &dataSize);
-	if (result == ERROR_SUCCESS)
-	{
-		friendlyName = nameBuffer.data();
-	}
-	else
-	{
-		friendlyName = L"WinCamHTTP Virtual Camera";
+		// Open this camera's key
+		std::wstring subKeyPath = L"SOFTWARE\\WinCamHTTP\\Cameras\\" + std::wstring(cameraId);
+		HKEY hCameraKey;
+		if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, subKeyPath.c_str(), 0, KEY_READ, &hCameraKey) == ERROR_SUCCESS)
+		{
+			wil::unique_hkey cameraKeyGuard(hCameraKey);
+			
+			CameraInfo camera;
+			camera.id = cameraId;
+			camera.clsid = GenerateCameraClsid(camera.id);
+			
+			// Read URL
+			DWORD dataSize = 2048 * sizeof(WCHAR);
+			std::vector<WCHAR> urlBuffer(2048);
+			result = RegQueryValueExW(hCameraKey, L"URL", nullptr, nullptr, (LPBYTE)urlBuffer.data(), &dataSize);
+			if (result == ERROR_SUCCESS)
+			{
+				camera.url = urlBuffer.data();
+			}
+			
+			// Read Width/Height
+			dataSize = sizeof(DWORD);
+			DWORD width = 640, height = 480;
+			RegQueryValueExW(hCameraKey, L"Width", nullptr, nullptr, (LPBYTE)&width, &dataSize);
+			dataSize = sizeof(DWORD);
+			RegQueryValueExW(hCameraKey, L"Height", nullptr, nullptr, (LPBYTE)&height, &dataSize);
+			camera.width = width;
+			camera.height = height;
+			
+			// Read Friendly Name
+			dataSize = 256 * sizeof(WCHAR);
+			std::vector<WCHAR> nameBuffer(256);
+			result = RegQueryValueExW(hCameraKey, L"FriendlyName", nullptr, nullptr, (LPBYTE)nameBuffer.data(), &dataSize);
+			if (result == ERROR_SUCCESS)
+			{
+				camera.friendlyName = nameBuffer.data();
+			}
+			else
+			{
+				camera.friendlyName = L"WinCamHTTP Virtual Camera " + camera.id;
+			}
+			
+			_cameras.push_back(camera);
+		}
+		
+		index++;
+		nameSize = sizeof(cameraId) / sizeof(WCHAR);
 	}
 
 	return S_OK;
@@ -216,37 +268,41 @@ void ShowTrayContextMenu(HWND hwnd, POINT pt)
 	}
 }
 
-HRESULT RegisterVirtualCamera()
+HRESULT RegisterVirtualCameras()
 {
-	auto clsid = GUID_ToStringW(CLSID_VCam);
-	RETURN_IF_FAILED_MSG(MFCreateVirtualCamera(
-		MFVirtualCameraType_SoftwareCameraSource,
-		MFVirtualCameraLifetime_Session,
-		MFVirtualCameraAccess_CurrentUser,
-		_title,
-		clsid.c_str(),
-		nullptr,
-		0,
-		&_vcam),
-		"Failed to create virtual camera");
+	for (auto& camera : _cameras)
+	{
+		auto clsid = GUID_ToStringW(camera.clsid);
+		RETURN_IF_FAILED_MSG(MFCreateVirtualCamera(
+			MFVirtualCameraType_SoftwareCameraSource,
+			MFVirtualCameraLifetime_Session,
+			MFVirtualCameraAccess_CurrentUser,
+			camera.friendlyName.c_str(),
+			clsid.c_str(),
+			nullptr,
+			0,
+			&camera.vcam),
+			"Failed to create virtual camera for %s", camera.id.c_str());
 
-	WINTRACE(L"RegisterVirtualCamera '%s' ok", clsid.c_str());
-	RETURN_IF_FAILED_MSG(_vcam->Start(nullptr), "Cannot start VCam");
-	WINTRACE(L"VCam was started");
+		WINTRACE(L"RegisterVirtualCamera '%s' for camera '%s' ok", clsid.c_str(), camera.id.c_str());
+		RETURN_IF_FAILED_MSG(camera.vcam->Start(nullptr), "Cannot start VCam for %s", camera.id.c_str());
+		WINTRACE(L"VCam for '%s' was started", camera.id.c_str());
+	}
+	
 	return S_OK;
 }
 
-HRESULT UnregisterVirtualCamera()
+HRESULT UnregisterVirtualCameras()
 {
-	if (!_vcam)
-		return S_OK;
-
-	// NOTE: we don't call Shutdown or this will cause 2 Shutdown calls to the media source and will prevent proper removing
-	//auto hr = _vcam->Shutdown();
-	//WINTRACE(L"Shutdown VCam hr:0x%08X", hr);
-
-	auto hr = _vcam->Remove();
-	WINTRACE(L"Remove VCam hr:0x%08X", hr);
+	for (auto& camera : _cameras)
+	{
+		if (camera.vcam)
+		{
+			auto hr = camera.vcam->Remove();
+			WINTRACE(L"Remove VCam for '%s' hr:0x%08X", camera.id.c_str(), hr);
+		}
+	}
+	
 	return S_OK;
 }
 
@@ -302,6 +358,44 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 		case IDM_TRAY_EXIT:
 			PostQuitMessage(0);
 			break;
+
+		case IDM_TRAY_SETUP:
+		{
+			// Attempt to launch the setup application. Prefer the executable next to this process's exe.
+			wchar_t exePath[MAX_PATH]{};
+			if (GetModuleFileNameW(NULL, exePath, ARRAYSIZE(exePath)) > 0)
+			{
+				// Strip filename from path to get folder
+				wchar_t* lastSlash = wcsrchr(exePath, L'\\');
+				if (lastSlash)
+				{
+					*(lastSlash + 1) = L'\0';
+				}
+				std::wstring setupPath = std::wstring(exePath) + L"ARM64\\Release\\WinCamHTTPSetup.exe";
+
+				// If the ARM64 build path doesn't contain the setup exe, try sibling location
+				if (GetFileAttributesW(setupPath.c_str()) == INVALID_FILE_ATTRIBUTES)
+				{
+					setupPath = std::wstring(exePath) + L"WinCamHTTPSetup.exe";
+				}
+
+				SHELLEXECUTEINFOW sei{};
+				sei.cbSize = sizeof(sei);
+				sei.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
+				sei.hwnd = NULL;
+				sei.lpVerb = L"open";
+				sei.lpFile = setupPath.c_str();
+				sei.nShow = SW_SHOWNORMAL;
+				if (!ShellExecuteExW(&sei))
+				{
+					wchar_t msg[512];
+					swprintf_s(msg, L"Failed to launch Setup: '%s' (Error %d)", setupPath.c_str(), GetLastError());
+					MessageBoxW(NULL, msg, L"WinCamHTTP", MB_OK | MB_ICONERROR);
+				}
+			}
+		}
+		break;
+
 		}
 	}
 	break;

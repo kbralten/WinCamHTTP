@@ -12,8 +12,15 @@ HRESULT Activator::Initialize()
 {
 	_source = winrt::make_self<MediaSource>();
 	RETURN_IF_FAILED(SetUINT32(MF_VIRTUALCAMERA_PROVIDE_ASSOCIATED_CAMERA_SOURCES, 1));
-	RETURN_IF_FAILED(SetGUID(MFT_TRANSFORM_CLSID_Attribute, CLSID_VCam));
+	// The frame server provides attributes, we don't need to set a specific CLSID attribute here for operation
 	RETURN_IF_FAILED(_source->Initialize(this));
+	
+	// Load configuration for the specific camera ID
+	if (!_cameraId.empty())
+	{
+		RETURN_IF_FAILED(_source->LoadConfiguration(_cameraId.c_str()));
+	}
+	
 	return S_OK;
 }
 
