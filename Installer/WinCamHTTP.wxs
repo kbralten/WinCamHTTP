@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+  xmlns:WixUI="http://wixtoolset.org/schemas/v4/wixui">
   <Package Name="WinCamHTTP Virtual Camera"
            Manufacturer="WinCamHTTP Project"
            Version="1.0.0.0"
@@ -19,6 +20,25 @@
     <StandardDirectory Id="ProgramMenuFolder">
       <Directory Id="ApplicationProgramsFolder" Name="WinCamHTTP" />
     </StandardDirectory>
+
+  <!-- Installer properties -->
+  <!-- STARTUP: when set to 1 the installer will add WinCamHTTP to system startup (HKLM Run). -->
+  <!-- Can be set on the msiexec command line for silent installs: msiexec /i WinCamHTTP.msi STARTUP=1 /qn -->
+  <!-- Default to 1 so interactive installs enable startup by default. Users can uncheck the box in the UI. -->
+  <Property Id="STARTUP" Value="1" />
+
+  <!-- Point the built-in InstallDir UI to our INSTALLFOLDER directory id so InstallDirDlg works -->
+  <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+
+    <!-- Custom UI with our StartupDlg -->
+    <UI>
+      <DialogRef Id="StartupDlg" />
+      
+      <!-- Define a custom UI sequence -->
+      <InstallUISequence>
+        <Show Dialog="StartupDlg" Before="ExecuteAction" />
+      </InstallUISequence>
+    </UI>
 
     <!-- Feature definition -->
     <Feature Id="ProductFeature" Title="WinCamHTTP Virtual Camera" Level="1">
@@ -109,6 +129,17 @@
           <RegistryValue Name="Version" Type="string" Value="1.0.0.0" />
         </RegistryKey>
       </Component>
+
+      <!-- Conditional component that adds the application to system startup (HKLM Run).
+           This component is installed only when the public property STARTUP is set to "1".
+           Use on command line for silent install: msiexec /i WinCamHTTP.msi STARTUP=1 /qn
+           Note: writing to HKLM requires elevated install (Package Scope is perMachine so installer should already be elevated).
+      -->
+  <Component Id="StartupEntry" Guid="{66666666-6666-6666-6666-666666666666}" Condition="STARTUP = &quot;1&quot;">
+        <RegistryKey Root="HKLM" Key="SOFTWARE\Microsoft\Windows\CurrentVersion\Run">
+          <RegistryValue Name="WinCamHTTP" Type="string" Value='"[INSTALLFOLDER]WinCamHTTP.exe"' KeyPath="yes" />
+        </RegistryKey>
+      </Component>
       
     </ComponentGroup>
 
@@ -118,7 +149,7 @@
     <InstallExecuteSequence>
     </InstallExecuteSequence>
 
-    <!-- UI Configuration -->
-    <!-- No custom UI in WiX v4 minimal configuration; end-user can launch apps from Start Menu -->
+    <!-- No custom UI dialog is defined here. STARTUP remains available as a public property
+         so it can be set during silent or scripted installs (msiexec /i WinCamHTTP.msi STARTUP=1 /qn). -->
   </Package>
 </Wix>
