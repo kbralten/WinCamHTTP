@@ -9,6 +9,8 @@
 		<Manufacturer>WinCamHTTP Project</Manufacturer>
 		<ProductName>WinCamHTTP Virtual Camera</ProductName>
 		<GenerateProjectSpecificBurnManifest>false</GenerateProjectSpecificBurnManifest>
+		<!-- Suppress ICE validation to work around binary resource dependencies -->
+		<SuppressIces>ICE17;ICE20;ICE31</SuppressIces>
 	</PropertyGroup>
 
 	<ItemGroup>

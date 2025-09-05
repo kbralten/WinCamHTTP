@@ -1,22 +1,28 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
-     xmlns:WixUI="http://wixtoolset.org/schemas/v4/wixui">
-  <!-- Fragment containing the StartupDlg definition wrapped in a UI element
-       so the Dialog is a valid child in the WiX v4 schema. -->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <!-- Fragment containing only our custom StartupDlg -->
   <Fragment>
     <UI>
+      <!-- Main setup dialog with startup checkbox -->
       <Dialog Id="StartupDlg" Width="370" Height="270" Title="[ProductName] Setup">
-        <Control Id="Description" Type="Text" X="15" Y="15" Width="340" Height="60" Text="This installer will install WinCamHTTP.\nSelect options below and click Next to continue." />
+        <Control Id="Title" Type="Text" X="15" Y="15" Width="300" Height="20" Text="{\WixUI_Font_Title}WinCamHTTP Virtual Camera Setup" />
+        <Control Id="Description" Type="Text" X="25" Y="45" Width="320" Height="40" Text="This installer will install WinCamHTTP Virtual Camera and register it with Windows. Choose your startup preference below." />
 
         <!-- Checkbox: checked by default because STARTUP property is 1 -->
-        <Control Id="StartupCheckbox" Type="CheckBox" X="15" Y="90" Width="340" Height="20" Text="Start WinCamHTTP when the system starts (recommended)"
+        <Control Id="StartupCheckbox" Type="CheckBox" X="25" Y="100" Width="320" Height="20" Text="&amp;Start WinCamHTTP automatically when Windows starts (recommended)"
                  Property="STARTUP" CheckBoxValue="1" />
 
-        <!-- Next/Cancel buttons -->
-        <Control Id="Next" Type="PushButton" X="215" Y="235" Width="56" Height="17" Text="Install">
+        <!-- Information text -->
+        <Control Id="InfoText" Type="Text" X="25" Y="140" Width="320" Height="60" Text="The installer will copy program files, register the virtual camera DLL with Windows, and create Start Menu shortcuts. Click Install to continue." />
+
+        <!-- Bottom line -->
+        <Control Id="BottomLine" Type="Line" X="0" Y="230" Width="370" Height="0" />
+
+        <!-- Install button -->
+        <Control Id="Install" Type="PushButton" X="250" Y="240" Width="56" Height="17" Default="yes" Text="&amp;Install">
           <Publish Event="EndDialog" Value="Return" />
         </Control>
-        <Control Id="Cancel" Type="PushButton" X="275" Y="235" Width="56" Height="17" Text="Cancel">
+        <Control Id="Cancel" Type="PushButton" X="310" Y="240" Width="56" Height="17" Cancel="yes" Text="Cancel">
           <Publish Event="EndDialog" Value="Exit" />
         </Control>
       </Dialog>

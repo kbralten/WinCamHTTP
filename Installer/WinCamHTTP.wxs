@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-  <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
-  xmlns:WixUI="http://wixtoolset.org/schemas/v4/wixui">
+  <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <Package Name="WinCamHTTP Virtual Camera"
            Manufacturer="WinCamHTTP Project"
            Version="1.0.0.0"
@@ -30,15 +29,26 @@
   <!-- Point the built-in InstallDir UI to our INSTALLFOLDER directory id so InstallDirDlg works -->
   <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
 
-    <!-- Custom UI with our StartupDlg -->
+    <!-- Custom UI using WiX UI extension standard dialogs plus our custom dialog -->
     <UI>
       <DialogRef Id="StartupDlg" />
+      <DialogRef Id="ErrorDlg" />
+      <DialogRef Id="FatalError" />
+      <DialogRef Id="UserExit" />
+      <DialogRef Id="FilesInUse" />
       
-      <!-- Define a custom UI sequence -->
+      <!-- Install UI sequence with all required actions -->
       <InstallUISequence>
         <Show Dialog="StartupDlg" Before="ExecuteAction" />
       </InstallUISequence>
+
+      <!-- Text styles -->
+      <TextStyle Id="WixUI_Font_Normal" FaceName="Tahoma" Size="8" />
+      <TextStyle Id="WixUI_Font_Title" FaceName="Tahoma" Size="9" Bold="yes" />
     </UI>
+
+    <!-- Required properties -->
+    <Property Id="DefaultUIFont" Value="WixUI_Font_Normal" />
 
     <!-- Feature definition -->
     <Feature Id="ProductFeature" Title="WinCamHTTP Virtual Camera" Level="1">
@@ -135,7 +145,7 @@
            Use on command line for silent install: msiexec /i WinCamHTTP.msi STARTUP=1 /qn
            Note: writing to HKLM requires elevated install (Package Scope is perMachine so installer should already be elevated).
       -->
-  <Component Id="StartupEntry" Guid="{66666666-6666-6666-6666-666666666666}" Condition="STARTUP = &quot;1&quot;">
+  <Component Id="StartupEntry" Guid="{66666666-6666-6666-6666-666666666666}" Condition="STARTUP=&quot;1&quot;">
         <RegistryKey Root="HKLM" Key="SOFTWARE\Microsoft\Windows\CurrentVersion\Run">
           <RegistryValue Name="WinCamHTTP" Type="string" Value='"[INSTALLFOLDER]WinCamHTTP.exe"' KeyPath="yes" />
         </RegistryKey>
