@@ -34,30 +34,25 @@ jobs:
     - name: Add MSBuild to PATH
       uses: microsoft/setup-msbuild@v2
 
-    - name: Setup .NET SDK (for WiX v4 SDK project)
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: '8.0.x'
-
     - name: Restore NuGet packages (native projects)
       working-directory: ${{ github.workspace }}
       run: nuget restore ${{env.SOLUTION_FILE_PATH}}
 
-    - name: Restore WiX v4 SDK project
-      working-directory: ${{ github.workspace }}
-      run: dotnet restore .\Installer\Installer.wixproj
 
     - name: Build (native solution)
       working-directory: ${{ github.workspace }}
       # Build x64 to match the installer inputs
       run: msbuild /m /p:Configuration=${{env.BUILD_CONFIGURATION}} /p:Platform=x64 ${{env.SOLUTION_FILE_PATH}}
     
-    - name: Build Installer (WiX v4 SDK)
+    - name: Build Installer (Inno Setup)
       working-directory: ${{ github.workspace }}
-      run: dotnet build .\Installer\Installer.wixproj -c ${{env.BUILD_CONFIGURATION}} -p:Platform=x64
+      run: |
+        $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+        if (-not (Test-Path $iscc)) { throw "ISCC not found at $iscc" }
+        & $iscc "/DConfiguration=${{env.BUILD_CONFIGURATION}}" "/DPlatform=x64" "Installer\WinCamHTTP.iss"
 
     - name: Archive Artifacts
       uses: actions/upload-artifact@v4
       with:
         name: WinCamHTTP-${{env.BUILD_CONFIGURATION}}
-        path: ${{ github.workspace }}/Installer/bin/x64/${{env.BUILD_CONFIGURATION}}/*.msi
+        path: ${{ github.workspace }}/Installer/Output/WinCamHTTPSetup.exe

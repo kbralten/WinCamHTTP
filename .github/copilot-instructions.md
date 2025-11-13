@@ -10,7 +10,7 @@ Summary
   - `VCamSampleSource` (native C++ DLL): Media Source (virtual camera) loaded by the Windows Frame Server.
   - `VCamSample` (native C++ exe): Setup application (Admin) to configure camera settings in the registry (HKLM).
   - `WinCamHTTP` (native C++ exe): Tray app (user) that starts/stops virtual camera(s).
-  - `Installer` (WiX) and scripts for building an MSI/installer.
+  - `Installer` (Inno Setup) and scripts for building the installer EXE.
 - Languages: C++ (MSVC), Win32 API, Media Foundation, WinRT/wil.
 - Repository size: small-to-medium (~many C++ source files); primary dev/test is Windows-only.
 

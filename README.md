@@ -1,13 +1,13 @@
 # WinCamHTTP — Multi-Camera Virtual Webcam Sample
 
-WinCamHTTP is a Windows sample that implements a virtual webcam (Media Foundation virtual camera) which streams frames from an HTTP source. The project has been extended to support multiple virtual cameras (each with its own configuration and CLSID) and includes a setup UI, a tray application, and an MSI installer.
+WinCamHTTP is a Windows sample that implements a virtual webcam (Media Foundation virtual camera) which streams frames from an HTTP source. The project has been extended to support multiple virtual cameras (each with its own configuration and CLSID) and includes a setup UI, a tray application, and an Inno Setup-based installer.
 
 ## Contents
 
 - `VCamSampleSource/` — Media Source DLL (virtual camera implementation) and COM registration logic
 - `VCamSample/` — Setup application to add/remove/configure virtual cameras
 - `WinCamHTTP/` — Tray application that starts/stops configured virtual cameras
-- `Installer/` — WiX project and installer assets
+- `Installer/` — Inno Setup script (`WinCamHTTP.iss`) and installer assets
 - Build scripts: PowerShell scripts to build, register, and create installers
 
 ## Key changes (multi-camera support)
@@ -29,24 +29,27 @@ WinCamHTTP is a Windows sample that implements a virtual webcam (Media Foundatio
 
 1. Prerequisites
    - Visual Studio (MSVC) with C++ workload
-   - WiX Toolset (for building the installer). The repo includes local NuGet copies under `packages/`.
+   - Inno Setup 6 (for building the installer). Install from https://jrsoftware.org or via Chocolatey (`choco install innosetup`).
    - PowerShell (scripts included)
 
 2. Build (non-elevated)
    - Open a Developer PowerShell or regular PowerShell with MSBuild on PATH.
    - Restore packages and build the solution:
-     - `.
-     build-and-register.ps1 -BuildOnly`
+     ```powershell
+     nuget restore WinCamHTTP.sln
+     msbuild WinCamHTTP.sln /p:Configuration=Release /p:Platform=x64 /m
+     ```
    - Output artifacts are placed under `x64\\Release` for each project.
 
 3. Register DLLs and COM classes (requires admin)
-   - Run the registration script from an elevated PowerShell to write registry keys and register the DLLs:
-     - `.
-     build-and-register.ps1 -Register`
+   - Run the registration script from an elevated PowerShell to copy binaries to `C:\WinCamHTTP` and call `regsvr32`:
+     ```powershell
+     ./build-and-register.ps1
+     ```
    - Alternatively use `regsvr32` on the produced DLLs; make sure the DLLs are in a location accessible by the Frame Server services.
 
 4. Installer
-   - Use `create-installer.ps1` and the WiX project under `Installer/` to produce an MSI.
+   - Run `./build-installer.ps1` (or `./build-installer-nuget.ps1`) after installing Inno Setup 6. The script compiles `Installer\\WinCamHTTP.iss` and produces `Installer\\Output\\WinCamHTTPSetup.exe`.
 
 ## Runtime behavior
 
@@ -63,7 +66,7 @@ WinCamHTTP is a Windows sample that implements a virtual webcam (Media Foundatio
 ## Developer notes & next steps
 
 - Add unit tests for configuration parsing and registry helpers where practical.
-- Validate MSI on a clean Windows image to ensure registration and access rights work.
+- Validate the installer on a clean Windows image to ensure registration and access rights work.
 - Add CI (GitHub Actions) to build artifacts and produce installer packages.
 
 ## License

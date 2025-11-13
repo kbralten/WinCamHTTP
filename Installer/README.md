@@ -1,168 +1,92 @@
-# WinCamHTTP MSI Installer
+# WinCamHTTP Installer (Inno Setup)
 
-This directory contains the WiX Toolset configuration for creating a professional MSI installer package for WinCamHTTP.
+This directory now contains an [Inno Setup 6](https://jrsoftware.org/isinfo.php) script that packages the WinCamHTTP binaries into a distributable EXE installer with COM registration and Start Menu integration.
 
 ## Prerequisites
 
-### WiX Toolset v4.0+
-The installer requires the WiX Toolset to be installed on the build machine.
-
-**Download and Install:**
-- Download from: https://wixtoolset.org/releases/
-- Install WiX Toolset v4.0 or newer
-- Alternative: `dotnet tool install --global wix`
-
-### Visual Studio Build Tools
-- Visual Studio 2022 Community (or Professional/Enterprise)
-- MSBuild tools
-- Windows SDK
+- **Visual Studio 2022** (or Build Tools) with the Desktop C++ workload
+- **MSBuild** available on `PATH` (Developer PowerShell/Prompt)
+- **Inno Setup 6** installed. Any of the following options work:
+  - Official installer (default path: `C:\Program Files (x86)\Inno Setup 6\ISCC.exe`)
+  - Microsoft Store install (`%LOCALAPPDATA%\Programs\Inno Setup 6`)
+  - Chocolatey: `choco install innosetup --no-progress -y`
 
 ## Building the Installer
 
-### Automated Build
-Use the provided PowerShell script (recommended):
+### Automated build (recommended)
 
 ```powershell
-# Run as Administrator
-.\build-installer.ps1
+# Build binaries + compile installer (auto-detects ISCC.exe)
+./build-installer.ps1 -Configuration Release -Platform x64
 ```
 
-This script will:
-1. ✅ Check for WiX Toolset installation
-2. 🔨 Build the main WinCamHTTP solution
-3. 📦 Create the MSI installer package
-4. ✅ Verify the installation package
+The script will:
+1. Build `WinCamHTTP.sln`
+2. Locate `ISCC.exe`
+3. Compile `Installer/WinCamHTTP.iss`
+4. Drop `Installer/Output/WinCamHTTPSetup.exe` and copy it to `x64/Release/WinCamHTTPSetup.exe`
 
-### Manual Build
-If you prefer to build manually:
+For CI/non-admin scenarios, use the lighter script:
 
 ```powershell
-# 1. Build main solution
-msbuild WinCamHTTP.sln /p:Configuration=Release /p:Platform=x64
-
-# 2. Build installer (requires WiX)
-msbuild Installer\Installer.wixproj /p:Configuration=Release /p:Platform=x86
+# Requires msbuild + iscc already on PATH
+./build-installer-nuget.ps1 -Configuration Release -Platform x64
 ```
+
+### Manual build via Inno Setup
+
+1. Build the native binaries (Release/x64):
+   ```powershell
+   msbuild WinCamHTTP.sln /p:Configuration=Release /p:Platform=x64 /m
+   ```
+2. Compile the installer:
+   ```powershell
+   & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" \
+     "/DConfiguration=Release" \
+     "/DPlatform=x64" \
+     "Installer\WinCamHTTP.iss"
+   ```
+3. The installer is emitted to `Installer/Output/WinCamHTTPSetup.exe`.
 
 ## Installer Features
 
-### 🎯 **What Gets Installed**
-- **WinCamHTTPSource.dll** - Virtual camera COM component
-- **WinCamHTTPSetup.exe** - Administrator configuration utility
-- **WinCamHTTP.exe** - User tray application
-- **Debug symbols** (.pdb files)
-
-### 📂 **Installation Location**
-- **System Path:** `C:\Program Files\WinCamHTTP\`
-- **Registry:** `HKLM\SOFTWARE\WinCamHTTP`
-
-### 🎛️ **Automatic Configuration**
-- ✅ COM component registration (WinCamHTTPSource.dll)
-- ✅ Start Menu shortcuts creation
-- ✅ Registry configuration
-- ✅ Uninstall entry in Programs & Features
-
-### 🚀 **Start Menu Shortcuts**
-- **WinCamHTTP Setup** - Configure camera settings (requires Admin)
-- **WinCamHTTP** - Run tray application (regular user)
-- **Uninstall WinCamHTTP** - Remove the application
-
-## Installation Options
-
-### 🖱️ **Interactive Installation**
-Double-click `WinCamHTTP.msi` and follow the wizard.
-
-### 🤖 **Silent Installation**
-```cmd
-msiexec /i WinCamHTTP.msi /quiet
-```
-
-### 🔧 **Installation with Logging**
-```cmd
-msiexec /i WinCamHTTP.msi /l*v install.log
-```
-
-### 🗑️ **Silent Uninstall**
-```cmd
-msiexec /x WinCamHTTP.msi /quiet
-```
+- Installs `WinCamHTTP.exe`, `WinCamHTTPSetup.exe`, and `WinCamHTTPSource.dll` to `C:\Program Files\WinCamHTTP\`
+- Runs `regsvr32 /s` during install (and `/u` on uninstall) to guarantee COM registration
+- Creates Start Menu shortcuts for both apps and the uninstaller
+- Adds optional desktop and "Start WinCamHTTP with Windows" tasks
+- Writes `HKLM\SOFTWARE\WinCamHTTP` values for install path and version
+- Supports silent install/uninstall switches:
+  - `WinCamHTTPSetup.exe /VERYSILENT /NORESTART`
+  - `WinCamHTTPSetup.exe /VERYSILENT /SUPPRESSMSGBOXES /LOG=install.log`
 
 ## Usage After Installation
 
-### 1. **Configure Settings (Administrator)**
-```
-Start Menu → WinCamHTTP → WinCamHTTP Setup
-```
-- Set MJPEG URL
-- Configure resolution
-- Set camera name
-- Save settings to registry
-
-### 2. **Run Virtual Camera (Regular User)**
-```
-Start Menu → WinCamHTTP → WinCamHTTP
-```
-- Starts tray application
-- Automatically starts virtual camera
-- Right-click tray icon to exit
-
-### 3. **Use in Applications**
-Open any camera application:
-- Windows Camera
-- Teams, Zoom, Discord
-- OBS Studio
-- Web browsers (WebRTC)
-
-Select **"WinCamHTTP Source"** as your camera.
+1. **Configure settings (Admin):** Start Menu → *WinCamHTTP* → *WinCamHTTP Setup*
+2. **Run the virtual camera (User):** Start Menu → *WinCamHTTP* → *WinCamHTTP*
+3. **Verify in apps:** Select **"WinCamHTTP Source"** inside Windows Camera, Teams, Zoom, etc.
 
 ## Troubleshooting
 
-### ❌ **Build Fails: WiX Not Found**
-```
-Error: The WiX Toolset v4.0 build tools must be installed
-```
-**Solution:** Install WiX Toolset from https://wixtoolset.org/releases/
+- **ISCC.exe not found:** Install Inno Setup 6 or export the path via `INNO_SETUP_PATH`.
+- **COM registration fails:** Confirm the installer was run elevated (required) or rerun `regsvr32 "C:\Program Files\WinCamHTTP\WinCamHTTPSource.dll"` manually.
+- **Installer build fails:** Ensure Release/x64 binaries exist under `x64\Release` before compiling the `.iss`.
 
-### ❌ **COM Registration Fails**
-The installer automatically handles COM registration, but if manual registration is needed:
-```cmd
-regsvr32 "C:\Program Files\WinCamHTTP\WinCamHTTPSource.dll"
-```
+## Testing Notes
 
-### ❌ **Installation Fails: Access Denied**
-**Solution:** Run the installer as Administrator:
-```cmd
-Right-click WinCamHTTP.msi → "Run as administrator"
-```
+- Run `Installer\Output\WinCamHTTPSetup.exe /VERYSILENT /LOG=install.log` and confirm the log records a successful `regsvr32` execution.
+- After uninstalling, re-run with `/LOG=uninstall.log` or monitor Event Viewer to ensure the `/u` invocation succeeds.
+- If you need to validate manually, execute `regsvr32 /s "C:\Program Files\WinCamHTTP\WinCamHTTPSource.dll"` and confirm `MFCreateVirtualCamera` finds the virtual device in dependent apps.
 
-### 🔍 **Debug Installation Issues**
-Create detailed installation log:
-```cmd
-msiexec /i WinCamHTTP.msi /l*v debug.log
-```
-
-## File Structure
+## File Layout
 
 ```
 Installer/
-├── WinCamHTTP.wxs          # WiX source file (main installer definition)
-├── Installer.wixproj       # WiX project file
-├── bin/Release/            # Build output directory
-│   └── WinCamHTTP.msi      # Final installer package
-└── README.md               # This file
+├── WinCamHTTP.iss      # Main Inno Setup script
+├── Output/             # Generated installers (gitignored)
+└── README.md           # This file
 ```
-
-## Advanced Configuration
-
-### Custom Installation Directory
-The installer supports custom installation paths via Windows Installer properties:
-```cmd
-msiexec /i WinCamHTTP.msi INSTALLFOLDER="C:\CustomPath\WinCamHTTP" /quiet
-```
-
-### Component Selection
-Currently, all components are required. Future versions may support selective installation.
 
 ## Version History
 
-- **v1.0.0** - Initial MSI installer with full COM registration and Start Menu integration
+- **v2.0.0** – Switched from WiX/MSI to Inno Setup 6 EXE installer
+- **v1.0.0** – Original WiX/MSI implementation (removed)
