@@ -1,17 +1,13 @@
-#Requires -RunAsAdministrator
-
 <#
 .SYNOPSIS
-    Builds WinCamHTTP solution and creates MSI installer package.
+    Builds WinCamHTTP solution and creates an Inno Setup installer.
 
 .DESCRIPTION
     This script performs the complete build and packaging for WinCamHTTP:
-    1. Checks for WiX Toolset v4.0 or newer
-    2. Builds the main solution in Release x64 configuration
-    3. Builds the MSI installer using WiX
-    4. Creates a distributable MSI package
-    
-    Requires WiX Toolset v4.0+ to be installed.
+    1. Builds the main solution in Release x64 configuration
+    2. Locates the Inno Setup compiler (ISCC.exe)
+    3. Compiles Installer\WinCamHTTP.iss into WinCamHTTPSetup.exe
+    4. Copies the installer next to the build outputs for convenience
 
 .PARAMETER Configuration
     Build configuration (default: Release)
@@ -21,12 +17,17 @@
     
 .PARAMETER SkipBuild
     Skip main solution build and only create installer
+
+.PARAMETER InnoSetupPath
+    Optional explicit path to ISCC.exe. If not supplied, common install paths
+    (including %LOCALAPPDATA%\Programs\Inno Setup 6) will be probed.
 #>
 
 param(
     [string]$Configuration = "Release",
     [string]$Platform = "x64",
-    [switch]$SkipBuild
+    [switch]$SkipBuild,
+    [string]$InnoSetupPath
 )
 
 # Script variables
@@ -34,21 +35,14 @@ $RepoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $SolutionFile = Join-Path $RepoRoot "WinCamHTTP.sln"
 $OutputDir = Join-Path $RepoRoot "$Platform\$Configuration"
 $MSBuildPath = "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe"
-$InstallerProject = Join-Path $RepoRoot "Installer\Installer.wixproj"
-$InstallerOutputDir = Join-Path $RepoRoot "Installer\bin\Release"
+$InnoScript = Join-Path $RepoRoot "Installer\WinCamHTTP.iss"
+$InstallerOutputDir = Join-Path $RepoRoot "Installer\Output"
 
-Write-Host "WinCamHTTP MSI Installer Build Script" -ForegroundColor Green
-Write-Host "=====================================" -ForegroundColor Green
+Write-Host "WinCamHTTP Inno Setup Build Script" -ForegroundColor Green
+Write-Host "==================================" -ForegroundColor Green
 Write-Host "Repository: $RepoRoot"
 Write-Host "Configuration: $Configuration $Platform"
 Write-Host ""
-
-# Check if running as Administrator
-if (-NOT ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
-    Write-Error "This script must be run as Administrator for proper MSI creation."
-    Write-Host "Please right-click PowerShell and select 'Run as Administrator', then run this script again."
-    exit 1
-}
 
 # Function to check if file exists, exit if not
 function Test-FileExists {
@@ -60,7 +54,7 @@ function Test-FileExists {
 }
 
 # Function to run command and check exit code
-function Invoke-Command {
+function Invoke-External {
     param([string]$Command, [string[]]$Arguments, [string]$Description)
     Write-Host "Running: $Description..." -ForegroundColor Yellow
     $process = Start-Process -FilePath $Command -ArgumentList $Arguments -Wait -PassThru -NoNewWindow
@@ -71,46 +65,27 @@ function Invoke-Command {
     Write-Host "$Description completed successfully." -ForegroundColor Green
 }
 
-# Function to check for WiX Toolset
-function Test-WixToolset {
-    Write-Host "Checking for WiX Toolset..." -ForegroundColor Cyan
-    
-    # Check common installation paths
-    $WixPaths = @(
-        "${env:ProgramFiles(x86)}\WiX Toolset v4.0\bin\wix.exe",
-        "${env:ProgramFiles}\WiX Toolset v4.0\bin\wix.exe",
-        "${env:ProgramFiles(x86)}\Microsoft SDKs\Windows\v7.0A\Bin\WiX\wix.exe",
-        "${RepoRoot}\packages\wix.4.0.6\tools\net6.0\any\wix.exe"
+function Resolve-IsccPath {
+    $candidates = @()
+    if ($InnoSetupPath) { $candidates += $InnoSetupPath }
+    if ($env:INNO_SETUP_PATH) { $candidates += $env:INNO_SETUP_PATH }
+    $candidates += @(
+        "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+        "${env:ProgramFiles}\Inno Setup 6\ISCC.exe",
+        "${env:LOCALAPPDATA}\Programs\Inno Setup 6\ISCC.exe",
+        "C:\Users\kevin\AppData\Local\Programs\Inno Setup 6\ISCC.exe"
     )
-    
-    foreach ($path in $WixPaths) {
-        if (Test-Path $path) {
-            Write-Host "Found WiX Toolset at: $path" -ForegroundColor Green
-            return $true
+
+    foreach ($candidate in $candidates) {
+        if ([string]::IsNullOrWhiteSpace($candidate)) { continue }
+        if (Test-Path $candidate) {
+            return (Resolve-Path $candidate).Path
         }
     }
-    
-    # Check PATH environment variable
-    try {
-        $wixVersion = & wix.exe --version 2>$null
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "Found WiX Toolset in PATH" -ForegroundColor Green
-            return $true
-        }
-    } catch {
-        # Continue to error message
-    }
-    
-    Write-Host "WiX Toolset v4.0 or newer is required but not found!" -ForegroundColor Red
-    Write-Host ""
-    Write-Host "To install WiX Toolset:" -ForegroundColor Yellow
-    Write-Host "1. Download from: https://wixtoolset.org/releases/" -ForegroundColor White
-    Write-Host "2. Install WiX Toolset v4.0 or newer" -ForegroundColor White
-    Write-Host "3. Restart this script" -ForegroundColor White
-    Write-Host ""
-    Write-Host "Alternative - Use Chocolatey:" -ForegroundColor Yellow
-    Write-Host "choco install wixtoolset" -ForegroundColor White
-    Write-Host ""
+
+    Write-Host "Inno Setup compiler (ISCC.exe) not found." -ForegroundColor Red
+    Write-Host "Install Inno Setup 6 or pass -InnoSetupPath 'C:\Path\To\ISCC.exe'." -ForegroundColor Yellow
+    Write-Host "Download: https://jrsoftware.org/isinfo.php" -ForegroundColor Yellow
     exit 1
 }
 
@@ -119,8 +94,9 @@ try {
     Write-Host "[1/4] Checking prerequisites..." -ForegroundColor Cyan
     Test-FileExists $SolutionFile "Solution file"
     Test-FileExists $MSBuildPath "MSBuild"
-    Test-FileExists $InstallerProject "Installer project"
-    Test-WixToolset
+    Test-FileExists $InnoScript "Inno Setup script"
+    $IsccPath = Resolve-IsccPath
+    Write-Host "Using Inno Setup compiler at: $IsccPath" -ForegroundColor Green
     
     # Step 2: Build main solution
     if (-not $SkipBuild) {
@@ -132,7 +108,7 @@ try {
             "/m",
             "/verbosity:minimal"
         )
-        Invoke-Command $MSBuildPath $buildArgs "Main solution build"
+        Invoke-External $MSBuildPath $buildArgs "Main solution build"
         
         # Verify outputs exist
         $requiredFiles = @(
@@ -149,42 +125,47 @@ try {
         Write-Host "[2/4] Skipping main solution build (SkipBuild specified)" -ForegroundColor Yellow
     }
     
-    # Step 3: Build MSI installer
-    Write-Host "[3/4] Building MSI installer..." -ForegroundColor Cyan
+    # Step 3: Compile Inno Setup installer
+    Write-Host "[3/4] Compiling Inno Setup installer..." -ForegroundColor Cyan
     $installerArgs = @(
-        $InstallerProject,
-        "/p:Configuration=Release",
-        "/p:Platform=x64",
-        "/m",
-        "/verbosity:minimal"
+        "/DConfiguration=$Configuration",
+        "/DPlatform=$Platform",
+        "`"$InnoScript`""
     )
-    Invoke-Command $MSBuildPath $installerArgs "MSI installer build"
+    Invoke-External $IsccPath $installerArgs "Inno Setup compile"
     
     # Step 4: Verify and display results
     Write-Host "[4/4] Verifying installer output..." -ForegroundColor Cyan
-    $msiPath = Join-Path $InstallerOutputDir "WinCamHTTPSetup.msi"
-    Test-FileExists $msiPath "MSI installer package"
+    $installerPath = Join-Path $InstallerOutputDir "WinCamHTTPSetup.exe"
+    Test-FileExists $installerPath "Installer package"
+
+    $destDir = Join-Path $RepoRoot "$Platform\$Configuration"
+    if (-not (Test-Path $destDir)) {
+        New-Item -ItemType Directory -Path $destDir | Out-Null
+    }
+    $destInstaller = Join-Path $destDir "WinCamHTTPSetup.exe"
+    Copy-Item $installerPath $destInstaller -Force
     
-    # Get MSI file info
-    $msiInfo = Get-Item $msiPath
-    $msiSizeMB = [math]::Round($msiInfo.Length / 1MB, 2)
+    # Get installer file info
+    $installerInfo = Get-Item $installerPath
+    $installerSizeMB = [math]::Round($installerInfo.Length / 1MB, 2)
     
     Write-Host ""
-    Write-Host "SUCCESS: MSI installer created!" -ForegroundColor Green
-    Write-Host "===============================" -ForegroundColor Green
-    Write-Host "Installer package: $msiPath"
-    Write-Host "Package size: $msiSizeMB MB"
-    Write-Host "Created: $($msiInfo.CreationTime)"
+    Write-Host "SUCCESS: WinCamHTTP installer created!" -ForegroundColor Green
+    Write-Host "====================================" -ForegroundColor Green
+    Write-Host "Installer package: $installerPath"
+    Write-Host "Package size: $installerSizeMB MB"
+    Write-Host "Created: $($installerInfo.CreationTime)"
     Write-Host ""
     Write-Host "Installation Features:" -ForegroundColor White
-    Write-Host "• Installs to: C:\Program Files\WinCamHTTP\"
+    Write-Host "• Installs to: C:\\Program Files\\WinCamHTTP\\"
     Write-Host "• Registers COM components automatically"
     Write-Host "• Creates Start Menu shortcuts"
-    Write-Host "• Supports silent installation: msiexec /i WinCamHTTP.msi /quiet"
+    Write-Host "• Supports silent installation: WinCamHTTPSetup.exe /VERYSILENT"
     Write-Host "• Supports uninstall via Programs & Features"
     Write-Host ""
     Write-Host "To test the installer:" -ForegroundColor Yellow
-    Write-Host "1. Right-click WinCamHTTP.msi → Install"
+    Write-Host "1. Double-click WinCamHTTPSetup.exe"
     Write-Host "2. Follow the installation wizard"
     Write-Host "3. Launch from Start Menu → WinCamHTTP"
     Write-Host ""
