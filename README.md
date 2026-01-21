@@ -1,8 +1,44 @@
-# WinCamHTTP — Multi-Camera Virtual Webcam Sample
+# WinCamHTTP
 
-WinCamHTTP is a Windows sample that implements a virtual webcam (Media Foundation virtual camera) which streams frames from an HTTP source. The project has been extended to support multiple virtual cameras (each with its own configuration and CLSID) and includes a setup UI, a tray application, and an Inno Setup-based installer.
+WinCamHTTP allows you to create virtual Windows webcams that stream video directly from a network URL (HTTP/MJPEG). This is useful for bringing IP cameras, network streams, or other HTTP video sources into applications like Zoom, Teams, Discord, or OBS that expect a standard webcam.
 
-## Contents
+## Features
+
+- **Network to Webcam:** Turn any MJPEG HTTP stream into a recognized Windows Camera source.
+- **Multi-Camera Support:** Create multiple independent virtual webcams with different names and sources.
+- **Easy Configuration:** Includes a Setup application to add, remove, and configure cameras easily.
+- **Tray Application:** Simple system tray utility to manage the active virtual cameras.
+
+## Installation
+
+1.  Download the latest installer (`WinCamHTTPSetup.exe`) from the [**GitHub Releases**](https://github.com/kbralten/WinCamHTTP/releases/latest) page.
+2.  Run the installer. *Note: Administrator privileges are required to register the virtual camera drivers.*
+3.  Follow the on-screen instructions to complete the installation.
+
+## How to Use
+
+### 1. Configure Cameras
+Run the **WinCamHTTP Setup** application (Administrator privileges required) to manage your cameras.
+- Click **Add** to create a new virtual camera.
+- **Friendly Name:** The name that will appear in apps like Zoom or Teams.
+- **MJPEG URL:** The HTTP URL of the video stream (e.g., `http://192.168.1.50/video.mjpeg`).
+- Click **Save** to apply changes.
+
+### 2. Start the Service
+Run the **WinCamHTTP** application from the Start menu.
+- This runs in your system tray (near the clock).
+- It ensures the virtual cameras are active and ready for use.
+
+### 3. Use in Applications
+Open your video conferencing or streaming software (Zoom, Teams, OBS, etc.). You will see your configured cameras (e.g., "WinCamHTTP Camera 1") listed alongside your physical webcams.
+
+---
+
+# Developer Notes
+
+The following section is intended for developers contributing to the project or building from source.
+
+## Project Structure
 
 - `VCamSampleSource/` — Media Source DLL (virtual camera implementation) and COM registration logic
 - `VCamSample/` — Setup application to add/remove/configure virtual cameras
@@ -10,64 +46,50 @@ WinCamHTTP is a Windows sample that implements a virtual webcam (Media Foundatio
 - `Installer/` — Inno Setup script (`WinCamHTTP.iss`) and installer assets
 - Build scripts: PowerShell scripts to build, register, and create installers
 
-## Key changes (multi-camera support)
+## Technical Overview (Multi-Camera Support)
 
-- Per-camera registry layout:
-  - All cameras are stored under `HKLM\\SOFTWARE\\WinCamHTTP\\Cameras`.
-  - Each camera is a subkey named by a GUID camera ID (string) and contains values:
-    - `CLSID` — COM class ID for the virtual camera implementation (string)
-    - `FriendlyName` — Display name for the camera (string)
-    - `Url` — HTTP URL to fetch frames from (string)
-    - `FrameRate` — Requested frame rate (DWORD)
-    - Additional sample-specific configuration values as needed
+- **Registry Layout:**
+  - All cameras are stored under `HKLM\SOFTWARE\WinCamHTTP\Cameras`.
+  - Each camera is a subkey named by a GUID and contains:
+    - `CLSID` — COM class ID for the virtual camera implementation.
+    - `FriendlyName` — Display name.
+    - `Url` — MJPEG source URL.
+    - `FrameRate` — Requested frame rate.
 
-- DLL/COM registration:
-  - The DLL registers one or more COM class entries. During registration the code enumerates `HKLM\\SOFTWARE\\WinCamHTTP\\Cameras` and registers class information for every camera found.
-  - The Activator/MediaSource code expects a per-camera camera ID to be set before initialization so it can read its configuration from the registry.
+- **COM Registration:**
+  - The DLL registers one or more COM class entries.
+  - During registration (`DllRegisterServer`), the code enumerates `HKLM\SOFTWARE\WinCamHTTP\Cameras` and registers class information for every camera found.
+  - The Activator/MediaSource code reads `HKLM` configuration based on the camera ID.
 
-## Developer workflow — build & registration
+## Build & Registration Workflow
 
-1. Prerequisites
-   - Visual Studio (MSVC) with C++ workload
-   - Inno Setup 6 (for building the installer). Install from https://jrsoftware.org or via Chocolatey (`choco install innosetup`).
-   - PowerShell (scripts included)
+### Prerequisites
+- Visual Studio 2022 (MSVC C++ workload)
+- [Inno Setup 6](https://jrsoftware.org) (for building the installer)
+- PowerShell
 
-2. Build (non-elevated)
-   - Open a Developer PowerShell or regular PowerShell with MSBuild on PATH.
-   - Restore packages and build the solution:
-     ```powershell
-     nuget restore WinCamHTTP.sln
-     msbuild WinCamHTTP.sln /p:Configuration=Release /p:Platform=x64 /m
-     ```
-   - Output artifacts are placed under `x64\\Release` for each project.
+### 1. Build (Non-Elevated)
+Restore packages and build the solution in Release mode:
+```powershell
+nuget restore WinCamHTTP.sln
+msbuild WinCamHTTP.sln /p:Configuration=Release /p:Platform=x64 /m
+```
+Artifacts are placed under `x64\Release` for each project.
 
-3. Register DLLs and COM classes (requires admin)
-   - Run the registration script from an elevated PowerShell to copy binaries to `C:\WinCamHTTP` and call `regsvr32`:
-     ```powershell
-     ./build-and-register.ps1
-     ```
-   - Alternatively use `regsvr32` on the produced DLLs; make sure the DLLs are in a location accessible by the Frame Server services.
+### 2. Manual Registration (Dev Loop)
+To test without the full installer, use the registration script in an **Administrator** PowerShell:
+```powershell
+./build-and-register.ps1
+```
+This builds the solution, copies binaries to `C:\WinCamHTTP`, and registers the DLLs via `regsvr32`.
 
-4. Installer
-   - Run `./build-installer.ps1` (or `./build-installer-nuget.ps1`) after installing Inno Setup 6. The script compiles `Installer\\WinCamHTTP.iss` and produces `Installer\\Output\\WinCamHTTPSetup.exe`.
+### 3. Build Installer
+Run `./build-installer.ps1`. This compiles `Installer\WinCamHTTP.iss` and produces the setup EXE in `Installer\Output\`.
 
-## Runtime behavior
-
-- The `WinCamHTTP` tray app enumerates `HKLM\\SOFTWARE\\WinCamHTTP\\Cameras`, and starts/stops a media source instance for each configured camera.
-- The setup app (`VCamSample`) lets you add/edit/remove camera entries and writes them under `HKLM\\SOFTWARE\\WinCamHTTP\\Cameras`.
-
-## Troubleshooting and notes
-
-- Administration: Writing to `HKLM` and registering COM DLLs requires Administrator privileges. Use an elevated PowerShell when running registration scripts or the installer.
-- Multiple cameras: Each virtual camera must have a unique camera ID GUID and corresponding CLSID. The registry keys under `HKLM\\SOFTWARE\\WinCamHTTP\\Cameras` are the single source of truth.
-- Debugging registration issues: Use `regedit` to inspect `HKLM\\SOFTWARE\\WinCamHTTP\\Cameras`. Confirm the `CLSID` and `InprocServer32` entries are present for each registered class.
-- Unregistering: Use `unregister.ps1` or `regsvr32 /u` for specific DLLs.
-
-## Developer notes & next steps
-
-- Add unit tests for configuration parsing and registry helpers where practical.
-- Validate the installer on a clean Windows image to ensure registration and access rights work.
-- Add CI (GitHub Actions) to build artifacts and produce installer packages.
+## Runtime Behavior & Troubleshooting
+- The **Tray App** (`WinCamHTTP`) enumerates the registry and initializes the virtual cameras using `MFCreateVirtualCamera`.
+- The **Setup App** (`VCamSample`) manages the registry keys in `HKLM`. Use `regedit` to inspect `HKLM\SOFTWARE\WinCamHTTP\Cameras` if settings seem incorrect.
+- **Permissions:** Writing to HKLM and registering COM DLLs requires Admin privileges. Ensure the DLLs are in a location accessible by `LocalService` (e.g., `Program Files` or a dedicated generic folder like `C:\WinCamHTTP`).
 
 ## License
 
